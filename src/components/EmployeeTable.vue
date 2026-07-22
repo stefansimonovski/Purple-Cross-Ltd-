@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { TableColumnCtx } from 'element-plus'
 import type { Employee } from '../types/employee'
 import { employmentStatus, terminationStatus } from '../utils/dateLabels'
 import { useMediaQuery } from '../composables/useMediaQuery'
@@ -13,6 +12,9 @@ type SortKey =
   | 'department'
   | 'dateOfEmployment'
   | 'terminationDate'
+
+const PAGE_SIZE = 10
+const PAGE_SIZES = [10, 20, 50]
 
 const props = defineProps<{
   employees: Employee[]
@@ -29,6 +31,8 @@ const selectedDepartments = ref<string[]>([])
 const selectedOccupations = ref<string[]>([])
 const sortKey = ref<SortKey>('fullName')
 const sortOrder = ref<'asc' | 'desc'>('asc')
+const currentPage = ref(1)
+const pageSize = ref(PAGE_SIZE)
 const deleteDialogVisible = ref(false)
 const employeePendingDelete = ref<Employee | null>(null)
 
@@ -38,14 +42,6 @@ const departmentOptions = computed(() =>
 
 const occupationOptions = computed(() =>
   [...new Set(props.employees.map((e) => e.occupation))].sort(),
-)
-
-const departmentFilters = computed(() =>
-  departmentOptions.value.map((value) => ({ text: value, value })),
-)
-
-const occupationFilters = computed(() =>
-  occupationOptions.value.map((value) => ({ text: value, value })),
 )
 
 const sortOptions: { label: string; value: SortKey }[] = [
@@ -66,11 +62,11 @@ function compareEmployees(a: Employee, b: Employee, key: SortKey): number {
   return a[key].localeCompare(b[key])
 }
 
-/** Search + mobile filters + mobile sort (cards). */
+/** Search, filters, and sort applied before pagination. */
 const displayedEmployees = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
 
-  let list = props.employees.filter((employee) => {
+  const list = props.employees.filter((employee) => {
     if (
       query &&
       !employee.fullName.toLowerCase().includes(query) &&
@@ -96,42 +92,64 @@ const displayedEmployees = computed(() => {
     return true
   })
 
-  if (isMobile.value) {
-    list = [...list].sort((a, b) => {
-      const result = compareEmployees(a, b, sortKey.value)
-      return sortOrder.value === 'asc' ? result : -result
-    })
+  return [...list].sort((a, b) => {
+    const result = compareEmployees(a, b, sortKey.value)
+    return sortOrder.value === 'asc' ? result : -result
+  })
+})
+
+const paginatedEmployees = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return displayedEmployees.value.slice(start, start + pageSize.value)
+})
+
+const showPagination = computed(
+  () => props.employees.length > 0 && displayedEmployees.value.length > 0,
+)
+
+watch([searchQuery, selectedDepartments, selectedOccupations, sortKey, sortOrder], () => {
+  currentPage.value = 1
+})
+
+watch(
+  () => displayedEmployees.value.length,
+  (total) => {
+    const maxPage = Math.max(1, Math.ceil(total / pageSize.value))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+    }
+  },
+)
+
+function onPageSizeChange(size: number) {
+  pageSize.value = size
+  currentPage.value = 1
+}
+
+function onTableSortChange({
+  prop,
+  order,
+}: {
+  prop: string
+  order: 'ascending' | 'descending' | null
+}) {
+  if (!order) {
+    sortKey.value = 'fullName'
+    sortOrder.value = 'asc'
+    return
   }
 
-  return list
-})
-
-/** Desktop table: search only; column filters/sort handled by el-table. */
-const tableEmployees = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return props.employees
-
-  return props.employees.filter(
-    (employee) =>
-      employee.fullName.toLowerCase().includes(query) ||
-      employee.code.toLowerCase().includes(query),
-  )
-})
-
-function filterByDepartment(value: string, row: Employee): boolean {
-  return row.department === value
-}
-
-function filterByOccupation(value: string, row: Employee): boolean {
-  return row.occupation === value
-}
-
-function sortByEmploymentDate(a: Employee, b: Employee): number {
-  return a.dateOfEmployment.localeCompare(b.dateOfEmployment)
-}
-
-function sortByTerminationDate(a: Employee, b: Employee): number {
-  return (a.terminationDate ?? '').localeCompare(b.terminationDate ?? '')
+  const allowed: SortKey[] = [
+    'fullName',
+    'occupation',
+    'department',
+    'dateOfEmployment',
+    'terminationDate',
+  ]
+  if (allowed.includes(prop as SortKey)) {
+    sortKey.value = prop as SortKey
+    sortOrder.value = order === 'ascending' ? 'asc' : 'desc'
+  }
 }
 
 function viewEmployee(code: string) {
@@ -153,17 +171,14 @@ function confirmDelete() {
   employeePendingDelete.value = null
 }
 
-function clearMobileFilters() {
+function clearFilters() {
   selectedDepartments.value = []
   selectedOccupations.value = []
   sortKey.value = 'fullName'
   sortOrder.value = 'asc'
   searchQuery.value = ''
+  currentPage.value = 1
 }
-
-type FilterHandler = TableColumnCtx<Employee>['filterMethod']
-const departmentFilterMethod = filterByDepartment as FilterHandler
-const occupationFilterMethod = filterByOccupation as FilterHandler
 </script>
 
 <template>
@@ -176,7 +191,7 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
         class="employee-table__search"
       />
 
-      <div v-if="isMobile" class="employee-table__mobile-controls">
+      <div class="employee-table__filters">
         <el-select
           v-model="selectedDepartments"
           multiple
@@ -211,36 +226,31 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
           />
         </el-select>
 
-        <el-select
-          v-model="sortKey"
-          placeholder="Sort by"
-          class="employee-table__control"
-        >
-          <el-option
-            v-for="option in sortOptions"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
+        <template v-if="isMobile">
+          <el-select
+            v-model="sortKey"
+            placeholder="Sort by"
+            class="employee-table__control"
+          >
+            <el-option
+              v-for="option in sortOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
 
-        <el-select
-          v-model="sortOrder"
-          placeholder="Order"
-          class="employee-table__control"
-        >
-          <el-option label="Ascending" value="asc" />
-          <el-option label="Descending" value="desc" />
-        </el-select>
+          <el-select
+            v-model="sortOrder"
+            placeholder="Order"
+            class="employee-table__control"
+          >
+            <el-option label="Ascending" value="asc" />
+            <el-option label="Descending" value="desc" />
+          </el-select>
+        </template>
 
-        <el-button
-          class="employee-table__clear"
-          text
-          type="primary"
-          @click="clearMobileFilters"
-        >
-          Clear filters
-        </el-button>
+        <el-button text type="primary" @click="clearFilters">Clear filters</el-button>
       </div>
     </div>
 
@@ -250,19 +260,14 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
     />
 
     <el-empty
-      v-else-if="isMobile && displayedEmployees.length === 0"
+      v-else-if="displayedEmployees.length === 0"
       description="No employees match your filters"
-    />
-
-    <el-empty
-      v-else-if="!isMobile && tableEmployees.length === 0"
-      description="No employees match your search"
     />
 
     <!-- Mobile card layout -->
     <div v-else-if="isMobile" class="employee-cards">
       <article
-        v-for="employee in displayedEmployees"
+        v-for="employee in paginatedEmployees"
         :key="employee.code"
         class="employee-card"
       >
@@ -305,40 +310,21 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
     <!-- Desktop / tablet table -->
     <div v-else class="employee-table__scroll">
       <el-table
-        :data="tableEmployees"
+        :data="paginatedEmployees"
         stripe
         border
         empty-text="No employees found"
+        :default-sort="{ prop: sortKey, order: sortOrder === 'asc' ? 'ascending' : 'descending' }"
         style="width: 100%"
+        @sort-change="onTableSortChange"
       >
+        <el-table-column prop="fullName" label="Full Name" sortable="custom" min-width="180" />
+        <el-table-column prop="occupation" label="Occupation" sortable="custom" min-width="160" />
+        <el-table-column prop="department" label="Department" sortable="custom" min-width="150" />
         <el-table-column
-          prop="fullName"
-          label="Full Name"
-          sortable
-          min-width="180"
-        />
-        <el-table-column
-          prop="occupation"
-          label="Occupation"
-          sortable
-          min-width="160"
-          column-key="occupation"
-          :filters="occupationFilters"
-          :filter-method="occupationFilterMethod"
-        />
-        <el-table-column
-          prop="department"
-          label="Department"
-          sortable
-          min-width="150"
-          column-key="department"
-          :filters="departmentFilters"
-          :filter-method="departmentFilterMethod"
-        />
-        <el-table-column
+          prop="dateOfEmployment"
           label="Date of Employment"
-          sortable
-          :sort-method="sortByEmploymentDate"
+          sortable="custom"
           min-width="160"
         >
           <template #default="{ row }">
@@ -346,9 +332,9 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
           </template>
         </el-table-column>
         <el-table-column
+          prop="terminationDate"
           label="Termination Date"
-          sortable
-          :sort-method="sortByTerminationDate"
+          sortable="custom"
           min-width="150"
         >
           <template #default="{ row }">
@@ -371,6 +357,18 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
       </el-table>
     </div>
 
+    <el-pagination
+      v-if="showPagination"
+      v-model:current-page="currentPage"
+      v-model:page-size="pageSize"
+      class="employee-table__pagination"
+      :page-sizes="PAGE_SIZES"
+      :total="displayedEmployees.length"
+      :layout="isMobile ? 'total, prev, pager, next' : 'total, sizes, prev, pager, next'"
+      background
+      @size-change="onPageSizeChange"
+    />
+
     <DeleteConfirmDialog
       v-model="deleteDialogVisible"
       :employee-name="employeePendingDelete?.fullName"
@@ -392,19 +390,15 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
   width: 100%;
 }
 
-.employee-table__mobile-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.employee-table__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
 .employee-table__control {
-  width: 100%;
-}
-
-.employee-table__clear {
-  grid-column: 1 / -1;
-  justify-self: start;
+  width: 180px;
 }
 
 .employee-table__scroll {
@@ -413,6 +407,11 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
   -webkit-overflow-scrolling: touch;
   background: #fff;
   border-radius: 8px;
+}
+
+.employee-table__pagination {
+  margin-top: 1rem;
+  justify-content: flex-end;
 }
 
 .employee-table__actions {
@@ -476,8 +475,19 @@ const occupationFilterMethod = filterByOccupation as FilterHandler
 }
 
 @media (max-width: 767px) {
-  .employee-table__search {
+  .employee-table__search,
+  .employee-table__control {
+    width: 100%;
     max-width: none;
+  }
+
+  .employee-table__filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .employee-table__pagination {
+    justify-content: center;
   }
 }
 </style>

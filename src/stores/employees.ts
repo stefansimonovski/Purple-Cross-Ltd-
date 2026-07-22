@@ -67,6 +67,12 @@ export const useEmployeesStore = defineStore('employees', () => {
     employees.value.splice(index, 1)
   }
 
+  function replaceAll(next: Employee[]): void {
+    employees.value = next.map((employee) => ({ ...employee }))
+    loaded.value = true
+    error.value = null
+  }
+
   return {
     employees,
     loading,
@@ -77,5 +83,6 @@ export const useEmployeesStore = defineStore('employees', () => {
     create,
     update,
     remove,
+    replaceAll,
   }
 })
