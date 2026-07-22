@@ -255,6 +255,7 @@ function onCancel() {
 <style scoped>
 .employee-form {
   max-width: 520px;
+  width: 100%;
 }
 
 .employee-form__error {
@@ -264,7 +265,19 @@ function onCancel() {
 .employee-form__actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .employee-form__actions {
+    flex-direction: column-reverse;
+  }
+
+  .employee-form__actions :deep(.el-button) {
+    width: 100%;
+    margin: 0;
+  }
 }
 </style>

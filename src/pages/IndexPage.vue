@@ -24,13 +24,15 @@ function goToCreate() {
 <template>
   <section class="index-page">
     <div class="index-page__header">
-      <h1>Employees</h1>
-      <p v-if="!store.loading && !store.error" class="index-page__count">
-        {{ store.employees.length }} records
-      </p>
+      <div>
+        <h1>Employees</h1>
+        <p v-if="!store.loading && !store.error" class="index-page__count">
+          {{ store.employees.length }} records
+        </p>
+      </div>
     </div>
 
-    <p v-if="store.loading">Loading employees…</p>
+    <p v-if="store.loading" class="index-page__status">Loading employees…</p>
     <el-alert
       v-else-if="store.error"
       :title="store.error"
@@ -59,30 +61,38 @@ function goToCreate() {
 
 <style scoped>
 .index-page__header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
 .index-page__header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
 }
 
 .index-page__count {
-  margin: 0;
+  margin: 0.2rem 0 0;
   color: #6b7280;
   font-size: 0.9rem;
 }
 
+.index-page__status {
+  color: #6b7280;
+}
+
 .create-fab {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
   z-index: 20;
   width: 56px;
   height: 56px;
   box-shadow: 0 4px 14px rgb(0 0 0 / 20%);
+}
+
+@media (min-width: 768px) {
+  .create-fab {
+    right: 24px;
+    bottom: 24px;
+  }
 }
 </style>

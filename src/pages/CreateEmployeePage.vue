@@ -56,7 +56,7 @@ function onCancel() {
 <style scoped>
 .create-page h1 {
   margin: 0 0 0.35rem;
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
 }
 
 .create-page__hint {

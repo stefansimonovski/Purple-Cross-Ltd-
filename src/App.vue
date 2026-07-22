@@ -1,14 +1,14 @@
 <script setup lang="ts">
+import AppNav from './components/AppNav.vue'
 </script>
 
 <template>
   <div class="app-shell">
-    <header class="app-header">
-      <strong>Purple Cross Ltd</strong>
-      <span class="app-header__note">Employee Management</span>
-    </header>
+    <AppNav />
     <main class="app-main">
-      <router-view />
+      <div class="app-main__inner">
+        <router-view />
+      </div>
     </main>
   </div>
 </template>

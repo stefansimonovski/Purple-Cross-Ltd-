@@ -146,11 +146,12 @@ function onCancel() {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.25rem;
+  flex-wrap: wrap;
 }
 
 .profile-page__header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
 }
 
 .profile-page__error {
